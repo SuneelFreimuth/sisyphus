@@ -1,8 +1,13 @@
+use crate::util::*;
+use crate::FLOAT_TOLERANCE;
+
 use nom::bytes::complete::{tag};
 use nom::branch::{alt};
 use nom::character::complete::{one_of, satisfy, space0};
 use nom::combinator::{value, map_res, recognize, opt};
-use nom::multi::{many0, many1};
+use nom::error::ErrorKind;
+use nom::multi::separated_list1;
+use nom::multi::{many1};
 use nom::number::complete::float;
 use nom::sequence::preceded;
 use nom::{IResult};
@@ -31,27 +36,42 @@ pub enum Function {
     Sqrt,
 }
 
-pub fn lex(mut input: &str) -> Result<Vec<Token>, nom::Err<nom::error::Error<&str>>> {
-    let mut tokens = Vec::new();
-    (input, _) = space0(input)?;
+pub fn lex(input: &str) -> Result<Vec<Token>, nom::Err<nom::error::Error<&str>>> {
+    let (_, tokens) = lex_tokens(input)?;
+    Ok(tokens)
+}
+
+pub fn is_valid_expression(input: &str) -> bool {
+    todo!()
+}
+
+fn lex_tokens(mut input: &str) -> IResult<&str, Vec<Token>> {
+    let mut tokens: Vec<Token> = Vec::new();
     loop {
-        let token: Option<Token>;
-        (input, token) = opt(lex_token)(input)?;
-        if let Some(t) = token {
-            tokens.push(t);
+        if let Ok((inp, _)) = space0::<_, nom::error::Error<&str>>(input) {
+            input = inp;
         } else {
             break;
         }
-        (input, _) = space0(input)?;
+        if let Ok((inp, token)) = lex_token(input) {
+            input = inp;
+            tokens.push(token);
+        } else {
+            break;
+        }
     }
-    Ok(tokens)
+    if tokens.len() > 0 {
+        Ok((input, tokens))
+    } else {
+        Err(nom::Err::Error(nom::error::make_error(input, ErrorKind::SeparatedList)))
+    }
 }
 
 fn lex_token(input: &str) -> IResult<&str, Token> {
     alt((
         lex_operator,
         lex_paren,
-        lex_builtin,
+        // lex_builtin,
         lex_number,
     ))(input)
 }
@@ -63,6 +83,7 @@ fn lex_operator(input: &str) -> IResult<&str, Token> {
         value(Operator::Star, tag("*")),
         value(Operator::Slash, tag("/")),
         value(Operator::Percent, tag("%")),
+        value(Operator::Caret, tag("^")),
     ))(input)?;
     Ok((input, Token::Operator(op)))
 }
@@ -137,14 +158,8 @@ fn lex_float_literal(input: &str) -> IResult<&str, Token> {
 mod tests {
     use super::*;
 
-    fn equal_within(a: f64, b: f64, err: f64) -> bool {
-        (a - b).abs() < err
-    }
-
-    const FLOAT_TOLERANCE: f64 = 1e-5;
-
     fn assert_lexes_to(input: &str, expected: Vec<Token>) {
-        let result = lex(input).unwrap();
+        let result = lex(input).expect(format!("Failed to parse input \"{input}\"").as_str());
         if result.len() != expected.len() {
             panic!("Incorrectly lexed input.\nActual: {result:?}\nExpected: {expected:?}");
         }
@@ -155,11 +170,6 @@ mod tests {
                 assert_eq!(pair.0, pair.1);
             }
         }
-    }
-
-    #[test]
-    fn lex_nothing() {
-        assert_lexes_to("", vec![]);
     }
 
     #[test]
@@ -190,10 +200,11 @@ mod tests {
         assert_lexes_to("e", vec![Token::Number(std::f64::consts::E)]);
     }
 
+    #[test]
     fn lex_flat_expressions() {
         assert_lexes_to("9+10", vec![
             Token::Number(9.),
-            Token::Operator(Operator::Minus),
+            Token::Operator(Operator::Plus),
             Token::Number(10.),
         ]);
         assert_lexes_to(" 2-1 ", vec![
@@ -229,17 +240,17 @@ mod tests {
         ]);
     }
 
-    fn lex_nested_expressions() {
-        assert_lexes_to("sqrt(3*3 + 4*4)", vec![
-            Token::Number(1.),
-            Token::Operator(Operator::Plus),
-            Token::Number(2.),
-            Token::Operator(Operator::Minus),
-            Token::Number(3.),
-            Token::Operator(Operator::Star),
-            Token::Number(4.),
-            Token::Operator(Operator::Slash),
-            Token::Number(5.),
-        ]);
-    }
+    // fn lex_nested_expressions() {
+    //     assert_lexes_to("sqrt(3*3 + 4*4)", vec![
+    //         Token::Number(1.),
+    //         Token::Operator(Operator::Plus),
+    //         Token::Number(2.),
+    //         Token::Operator(Operator::Minus),
+    //         Token::Number(3.),
+    //         Token::Operator(Operator::Star),
+    //         Token::Number(4.),
+    //         Token::Operator(Operator::Slash),
+    //         Token::Number(5.),
+    //     ]);
+    // }
 }
