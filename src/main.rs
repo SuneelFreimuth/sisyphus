@@ -23,11 +23,52 @@ use serenity::{
     model::{
         channel::Message,
         gateway::Ready,
-        prelude::{ChannelId, Reaction, ReactionType, UserId},
+        prelude::{ChannelId, UserId},
         user::User,
     },
     prelude::*,
 };
+
+#[tokio::main]
+async fn main() {
+    let config: Config = {
+        let args: Vec<String> = env::args().collect();
+        let config_path = args
+            .get(1)
+            .map(String::clone)
+            .unwrap_or(String::from("config.toml"));
+        let mut file = File::open(config_path).expect("could not open config.toml");
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        toml::from_str(contents.as_str()).unwrap()
+    };
+
+    let admins: Option<Vec<Admin>> = config
+        .admins
+        .map(|admins| admins.into_iter().map(Admin::from_string).collect());
+
+    let intents = GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT;
+
+    if let Some(ref admins) = admins {
+        println!("Starting bot with administrators:");
+        for admin in admins {
+            println!("  {}", admin.to_string());
+        }
+    } else {
+        println!("Starting bot...")
+    }
+
+    let mut client = Client::builder(&config.token, intents)
+        .event_handler(Bot::new(admins.unwrap_or_else(Vec::new)))
+        .await
+        .expect("Error creating client");
+
+    if let Err(why) = client.start().await {
+        println!("Client error: {:?}", why);
+    }
+}
 
 struct Bot {
     // Guarded uses a std::sync::Mutex; The sigil does not need to be locked
@@ -79,7 +120,7 @@ impl Bot {
         format!(
             "# [Sisyphus](https://github.com/SuneelFreimuth/sisyphus)
 To +∞ and beyond!
-### Commands:
+### Commands
 - `{s}help`  For more detailed documentation, see the README.
 - `{s}stat`  View bot status.
 - `{s}eval <expr...>`  Evaluate everything following the `$eval` command as an arithmetic expression.
@@ -275,40 +316,6 @@ impl Admin {
         } else {
             self.name.clone()
         }
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let config: Config = {
-        let mut file = File::open("config.toml").expect("could not open config.toml");
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
-        toml::from_str(contents.as_str()).unwrap()
-    };
-    let admins: Option<Vec<Admin>> = config
-        .admins
-        .map(|admins| admins.into_iter().map(Admin::from_string).collect());
-    let intents = GatewayIntents::GUILD_MESSAGES
-        | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::MESSAGE_CONTENT;
-
-    if let Some(ref admins) = admins {
-        println!("Starting bot with administrators:");
-        for admin in admins {
-            println!("  {}", admin.to_string());
-        }
-    } else {
-        println!("Starting bot...")
-    }
-
-    let mut client = Client::builder(&config.token, intents)
-        .event_handler(Bot::new(admins.unwrap_or_else(Vec::new)))
-        .await
-        .expect("Error creating client");
-
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
     }
 }
 
